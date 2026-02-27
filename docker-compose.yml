@@ -1,0 +1,11 @@
+# configuration for docker compose to run connect to a database
+version: '3.8'
+services:
+  dev-db:
+    image: postgres:latest
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: nestjs
