@@ -3,9 +3,14 @@ import * as argon from "argon2";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuthDto } from "./dto";
 
+import { JwtService } from "@nestjs/jwt";
+
 @Injectable({})
 export class AuthService {
-  constructor(private prisma: PrismaService) { }
+  constructor(
+    private prisma: PrismaService,
+    private jwtService: JwtService
+  ) { }
 
   async signIn(dto: AuthDto) {
     // steps
@@ -14,6 +19,9 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: {
         email: dto.email,
+      },
+      include: {
+        roles: true,
       },
     });
 
@@ -28,11 +36,24 @@ export class AuthService {
       throw new ForbiddenException("Credentials incorrect");
     }
 
+    // 3.create a access token for the user 
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      roles: user.roles.map((role) => role.roleName),
+    };
+
+    const access_token = await this.jwtService.signAsync(payload);
+
+    // set the cookies with the access token 
+  
+
     const { password, ...userWithoutPassword } = user;
 
     return {
       message: "Signed in successfully",
       user: userWithoutPassword,
+      access_token
     };
   }
 
@@ -46,6 +67,15 @@ export class AuthService {
         data: {
           email: dto.email,
           password: hashedPassword,
+          roles: {
+            connectOrCreate: {
+              where: { roleName: 'USER' },
+              create: { roleName: 'USER' },
+            },
+          },
+        },
+        include: {
+          roles: true,
         },
       });
 
