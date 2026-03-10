@@ -23,7 +23,7 @@ export class UserController {
     return this.userService.updateProfile(req.user.sub, dto);
   }
   // 2. Update password (current password, new password and update the password of the logged in user)  and also send code to email for password reset 
-  
+  @UseGuards(AuthGuard)
   @Patch('update/password')
   updatePassword(
     @Req() req: UserRequest,

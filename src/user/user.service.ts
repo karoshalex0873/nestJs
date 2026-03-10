@@ -1,12 +1,16 @@
-import { Body, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 import * as argon from 'argon2';
 import { UserDto } from './dto';
+import { MailsService } from 'src/mails/mails.service';
 
 @Injectable()
 export class UserService {
-  constructor(private prisma: PrismaService) { }
+  constructor(
+    private prisma: PrismaService,
+    private emailService: MailsService
+  ) { }
 
   // get me service
   async getMe(userId: string) {
@@ -45,6 +49,14 @@ export class UserService {
       }
     })
 
+    // send the email to the user for profile update
+    await this.emailService.sendMail({
+      to: updateUser.email,
+      subject: 'Profile Updated',
+      text: 'Your profile has been updated successfully',
+    })
+
+
     // 2. return the updated user
     const { password, ...userWithoutPassword } = updateUser;
     return userWithoutPassword;
@@ -67,7 +79,7 @@ export class UserService {
       throw new NotFoundException('User not found');
     }
     // 2. compare the current password with the hashed password in the database
-    const  isPasswordMatch = await argon.verify(user.password, currentPassword);
+    const isPasswordMatch = await argon.verify(user.password, currentPassword);
     if (!isPasswordMatch) {
       throw new NotFoundException('Current password is incorrect');
     }
@@ -78,13 +90,20 @@ export class UserService {
       where: {
         id: userId,
       },
-      data:{
+      data: {
         password: hashedNewPassword,
       }
     })
 
+    await this.emailService.sendMail({
+      to: user.email,
+      subject: 'Password Updated',
+      text: 'Your password has been changed successfully.',
+    });
+
     // 3. return the updated user
     return this.getMe(userId);
   }
+
 }
 
