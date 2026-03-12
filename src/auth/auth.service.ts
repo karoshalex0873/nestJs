@@ -21,7 +21,7 @@ export class AuthService {
         email: dto.email,
       },
       include: {
-        roles: true,
+        role: true,
       },
     });
 
@@ -40,7 +40,7 @@ export class AuthService {
     const payload = {
       sub: user.id,
       email: user.email,
-      roles: user.roles.map((role) => role.roleName),
+      role: user.role.roleName,
     };
 
     const access_token = await this.jwtService.signAsync(payload);
@@ -67,7 +67,7 @@ export class AuthService {
         data: {
           email: dto.email,
           password: hashedPassword,
-          roles: {
+          role: {
             connectOrCreate: {
               where: { roleName: 'USER' },
               create: { roleName: 'USER' },
@@ -75,7 +75,7 @@ export class AuthService {
           },
         },
         include: {
-          roles: true,
+          role: true,
         },
       });
 

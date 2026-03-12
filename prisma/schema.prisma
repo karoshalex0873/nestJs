@@ -36,25 +36,12 @@ model User {
   email     String   @unique
   password  String
 
-  firstName      String?
-  lastName      String?
+  firstName String?
+  lastName  String?
 
-  bookmarks Bookmark[]
+  roleId    String
+  role      Role     @relation(fields: [roleId], references: [role_id])
+
   @@map("users")
-
-  roles Role[]
 }
 
-model Bookmark {
-  id        String   @id @default(uuid())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  title     String
-  description String?
-  url       String
-
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  @@map("bookmarks")
-}

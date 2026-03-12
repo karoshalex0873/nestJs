@@ -5,6 +5,7 @@ import { BookmarkModule } from './bookmark/bookmark.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ConfigModule } from '@nestjs/config';
 import { MailsModule } from './mails/mails.module';
+import { RolesModule } from './roles/roles.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { MailsModule } from './mails/mails.module';
       isGlobal: true,
     }),
     AuthModule,
+    RolesModule,
     UserModule,
     BookmarkModule,
     PrismaModule,

@@ -20,7 +20,7 @@ export class UserService {
         id: userId,
       },
       include: {
-        roles: true,
+        role: true,
       },
     });
 
