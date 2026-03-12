@@ -14,34 +14,256 @@ datasource db {
   provider = "postgresql"
 }
 
-// model for the roles of the user, (Admin or  User) -> 1 to many relationship with the user
+// enum for diffculty level of the practice question
+enum DifficultyLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
 
+// model for the roles of the user, (Admin or  User) -> 1 to many relationship with the user
 
 model Role {
   role_id        String   @id @default(uuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  roleName      String   @unique
+  roleName String? @unique
 
   users User[]
+
   @@map("roles")
-} 
+}
 
 model User {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  email     String   @unique
-  password  String
+  email    String @unique
+  password String
 
   firstName String?
   lastName  String?
 
-  roleId    String
-  role      Role     @relation(fields: [roleId], references: [role_id])
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [role_id])
+
+  domains Domain[] @relation("UserDomains")
+
+  conceptProgress  UserConceptProgress[]
+  practiceProgress UserPracticeProgress[]
+  projectSteps     UserProjectStep[]
 
   @@map("users")
 }
 
+// Model  for Domain (area of study) eg Data Science, Software . 1 user can have mutiple domains and 1 domain can have multiple users. Many to many relationship between user and domain
+
+model Domain {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // domain information
+  name        String  @unique
+  description String?
+
+  users User[] @relation("UserDomains")
+
+  // relation with displine
+  displines Discipline[] @relation("DomainDisplines")
+
+  @@map("domains")
+}
+
+//  displine  model (specific topic within a domain) eg Machine Learning, Web Development. 1 displine can have multiple users and 1 user can have multiple displines. Many to many relationship between user and displine
+
+model Discipline {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name        String
+  description String?
+
+  domainId String
+  domain   Domain @relation("DomainDisplines", fields: [domainId], references: [id])
+
+  frameworks Framework[]
+
+  @@map("disciplines")
+}
+
+//  Framework / Technology model 
+//  one Discpline can have many Frameworks and One Framework can belong to one Displine. One to many relationship between displine and framework
+
+model Framework {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // framework information
+  name        String  @unique
+  description String?
+
+  displineId String
+  displine   Discipline @relation(fields: [displineId], references: [id])
+
+  concepts     Concept[]
+  mainProjects MainProject[]
+
+  @@map("frameworks")
+}
+
+// Model Concept (specific concept within a discipline) eg Supervised Learning, React Components. one discipline can have many concepts and one concept can belong to one discipline. One to many relationship between discipline and concept
+model Concept {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name        String
+  description String?
+  difficulty  DifficultyLevel
+
+  order Int
+
+  frameworkId String
+  framework   Framework @relation(fields: [frameworkId], references: [id])
+
+  subtopics Subtopic[]
+
+  projectSteps ProjectStep[]
+
+  userProgress UserConceptProgress[]
+
+  @@map("concepts")
+}
+
+// model subtopic (specific topic within a concept) eg Decision Trees, React Hooks. one concept can have many subtopics and one subtopic can belong to one concept. One to many relationship between concept and subtopic
+model Subtopic {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name        String
+  description String?
+
+  order Int
+
+  conceptId String
+  concept   Concept @relation(fields: [conceptId], references: [id])
+
+  practiceQuestions PracticeQuestion[]
+
+  @@map("subtopics")
+}
+
+// Practice Question model
+// one subtopic can have many practice questions and one practice question can belong to one subtopic. One to many relationship between subtopic and practice question
+
+model PracticeQuestion {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  title    String
+  question String
+  answer   String
+
+  difficulty DifficultyLevel
+
+  subtopicId String
+  subtopic   Subtopic @relation(fields: [subtopicId], references: [id])
+
+  userProgress UserPracticeProgress[]
+
+  @@map("practice_questions")
+}
+
+// Model for Main project for each displine
+// one displine can have many main projects and one main project can belong to one displine. One to many relationship between displine and main project
+
+model MainProject {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name        String
+  description String?
+
+  frameworkId String
+  framework   Framework @relation(fields: [frameworkId], references: [id])
+
+  steps ProjectStep[]
+
+  @@map("main_projects")
+}
+
+model ProjectStep {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  title       String
+  description String
+
+  order Int
+
+  mainProjectId String
+  mainProject   MainProject @relation(fields: [mainProjectId], references: [id])
+
+  conceptId String
+  concept   Concept @relation(fields: [conceptId], references: [id])
+
+  userProgress UserProjectStep[]
+
+  @@map("project_steps")
+}
+
+model UserConceptProgress {
+  id String @id @default(uuid())
+
+  userId    String
+  conceptId String
+
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+
+  user    User    @relation(fields: [userId], references: [id])
+  concept Concept @relation(fields: [conceptId], references: [id])
+
+  @@unique([userId, conceptId])
+  @@map("user_concept_progress")
+}
+
+model UserPracticeProgress {
+  id String @id @default(uuid())
+
+  userId     String
+  practiceId String
+
+  completed Boolean @default(false)
+  score     Int?
+
+  user     User             @relation(fields: [userId], references: [id])
+  practice PracticeQuestion @relation(fields: [practiceId], references: [id])
+
+  @@unique([userId, practiceId])
+  @@map("user_practice_progress")
+}
+
+model UserProjectStep {
+  id String @id @default(uuid())
+
+  userId String
+  stepId String
+
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+
+  user User        @relation(fields: [userId], references: [id])
+  step ProjectStep @relation(fields: [stepId], references: [id])
+
+  @@unique([userId, stepId])
+  @@map("user_project_steps")
+}

@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../generated/prisma/client';
 import * as argon from 'argon2';
@@ -12,16 +13,15 @@ const prisma = new PrismaClient(
 
 async function main() {
   await prisma.role.upsert({
-    where: { roleName: 'user' },
+    where: { roleName: 'admin' },
     update: {},
-    create: { roleName: 'user' },
+    create: { roleName: 'admin' },
   });
 
   const adminRole = await prisma.role.upsert({
     where: { roleName: 'admin' },
     update: {},
     create: { roleName: 'admin' },
-
   });
 
   const adminEmail = process.env.ADMIN_EMAIL ?? 'admin@example.com';
