@@ -16,8 +16,8 @@ export class UserController {
   }
 
   // user updates profiles to be managed here
-  // 1. Update profile (firstName, email, lastName and update the profile of the logged in user)
-  @UseGuards(AuthGuard)
+  // 1. Update profile (firstName, email, lastName and update the profile of the logged in user
+  @UseGuards(AuthGuard,)
   @Patch('update/me')
   updateProfile(@Req() req: UserRequest, @Body() dto: UserDto) {
     return this.userService.updateProfile(req.user.sub, dto);

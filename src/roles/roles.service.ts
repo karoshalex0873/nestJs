@@ -6,7 +6,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 export class RolesService {
   constructor(
     private prisma: PrismaService,
-  ) {}
+  ) { }
 
   async assignRoles(dto: RoleDto) {
     const { roleId, userId } = dto;
@@ -15,18 +15,25 @@ export class RolesService {
       throw new BadRequestException('Role ID is required');
     }
 
+    const role = await this.prisma.role.findUnique({
+      where: { role_id: roleId },
+      select: { role_id: true },
+    });
+
+    if (!role) {
+      throw new BadRequestException('Invalid roleId: role not found');
+    }
+
     const users = await this.prisma.user.findMany({
       where: { id: { in: userId } },
     });
 
-    const usersWithoutRole = users.filter((u) => !u.roleId);
-
-    if (usersWithoutRole.length === 0) {
-      throw new BadRequestException('No users found without a role');
+    if (users.length === 0) {
+      throw new BadRequestException('No users found for the provided userId values');
     }
 
     const updatedUser = await Promise.all(
-      usersWithoutRole.map((user) =>
+      users.map((user) =>
         this.prisma.user.update({
           where: { id: user.id },
           data: {
@@ -36,6 +43,7 @@ export class RolesService {
       ),
     );
 
-    return updatedUser;
+    // return updatedUser; without password
+    return updatedUser.map(({ password, ...userWithoutPassword }) => userWithoutPassword);
   }
 }

@@ -1,8 +1,9 @@
 import { Transform } from 'class-transformer';
-import { ArrayNotEmpty, IsArray, IsString } from 'class-validator';
+import { ArrayNotEmpty, IsArray, IsString, IsUUID } from 'class-validator';
 
 export class RoleDto {
   @IsString()
+  @IsUUID()
   roleId: string;
 
   @Transform(({ value, obj }) => {
@@ -16,5 +17,6 @@ export class RoleDto {
   @IsArray()
   @ArrayNotEmpty()
   @IsString({ each: true })
+  @IsUUID('4', { each: true })
   userId: string[];
 }

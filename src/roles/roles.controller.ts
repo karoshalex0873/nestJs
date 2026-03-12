@@ -1,7 +1,9 @@
-import { Body, Controller, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Patch, UseGuards } from '@nestjs/common';
 import { AuthGuard } from 'src/auth/auth.guard';
 import { RolesService } from './roles.service';
 import { RoleDto } from './dto';
+import { Roles } from './roles.decorator';
+import { RolesGuard } from './roles.guard';
 
 @Controller('role')
 export class RolesController {
@@ -9,7 +11,8 @@ export class RolesController {
   // TODO: implement roles management
   
   // 1. assign roles to users
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('ADMIN')
   @Patch('assign')
   assignRoles(@Body() dto:RoleDto) {
     return this.rolesService.assignRoles(dto);
