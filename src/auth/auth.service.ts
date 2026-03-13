@@ -63,16 +63,19 @@ export class AuthService {
 
     // 2. create and save the new user in the database
     try {
+      const roleName = dto.roleName?.trim().toLowerCase() || "user";
+
+      const role = await this.prisma.role.upsert({
+        where: { roleName },
+        update: {},
+        create: { roleName },
+      });
+
       const user = await this.prisma.user.create({
         data: {
           email: dto.email,
           password: hashedPassword,
-          role: {
-            connectOrCreate: {
-              where: { roleName: 'USER' },
-              create: { roleName: 'USER' },
-            },
-          },
+          roleId: role.role_id,
         },
         include: {
           role: true,

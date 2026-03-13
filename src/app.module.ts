@@ -6,6 +6,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ConfigModule } from '@nestjs/config';
 import { MailsModule } from './mails/mails.module';
 import { RolesModule } from './roles/roles.module';
+import { DomainModule } from './domain/domain.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { RolesModule } from './roles/roles.module';
     UserModule,
     BookmarkModule,
     PrismaModule,
-    MailsModule],
+    MailsModule,
+    DomainModule],
 })
 export class AppModule { }
