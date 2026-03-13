@@ -43,4 +43,13 @@ export class DomainController {
   getDomain(){
     return this.domainService.getDomain()
   }
+
+
+  // function of user selecting a domain
+  // @UseGuards(AuthGuard,Roles)
+
+  // selectDomain(){
+
+  // }
+  
 }
