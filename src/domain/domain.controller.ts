@@ -17,6 +17,7 @@ export class DomainController {
   addDomain(@Body() dto: DomainDto) {
     return this.domainService.addDomain(dto)
   }
+  
   // upadate function
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('admin')
