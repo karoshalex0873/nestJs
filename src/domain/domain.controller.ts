@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Param, ParseUUIDPipe, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, UseGuards } from '@nestjs/common';
 import { DomainDto } from './dto';
 import { AuthGuard } from 'src/auth/auth.guard';
 import { RolesGuard } from 'src/roles/roles.guard';
@@ -34,5 +34,12 @@ export class DomainController {
     @Param('domain_id', new ParseUUIDPipe()) domainId: string,
   ) {
     return this.domainService.deleteDomain(domainId);
+  }
+
+  // get all domains
+  @UseGuards(AuthGuard)
+  @Get('getAll')
+  getDomain(){
+    return this.domainService.getDomain()
   }
 }

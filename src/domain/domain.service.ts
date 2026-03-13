@@ -16,7 +16,7 @@ export class DomainService {
       const domanin = await this.prisma.domain.create({
         data: {
           name: dto.name,
-          description: dto.description
+          description: dto.description,
         }
       })
 
@@ -78,6 +78,22 @@ export class DomainService {
       
     } catch (error) {
       throw new ConflictException("something went wrong !!")
+    }
+  }
+
+  // get all domain
+  async getDomain (){
+    try {
+      // 1. get all domain 
+      const allDomain= await this.prisma.domain.findMany({
+        include:{
+          displines:true
+        }
+      })
+
+      return allDomain
+    } catch (error) {
+      throw new ConflictException(`something went wrong ${error}`)
     }
   }
 }
