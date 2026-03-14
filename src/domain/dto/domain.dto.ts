@@ -1,4 +1,4 @@
-import { IsString, isString } from "class-validator";
+import { IsString, IsUUID } from "class-validator";
 
 export  class DomainDto{
   
@@ -8,4 +8,9 @@ export  class DomainDto{
 
   @IsString()
   description:string 
+}
+
+export class SelectDomainDto {
+  @IsUUID()
+  domainId: string;
 }

@@ -7,6 +7,7 @@ import { ConfigModule } from '@nestjs/config';
 import { MailsModule } from './mails/mails.module';
 import { RolesModule } from './roles/roles.module';
 import { DomainModule } from './domain/domain.module';
+import { DisplineModule } from './displine/displine.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { DomainModule } from './domain/domain.module';
     BookmarkModule,
     PrismaModule,
     MailsModule,
-    DomainModule],
+    DomainModule,
+    DisplineModule],
 })
 export class AppModule { }

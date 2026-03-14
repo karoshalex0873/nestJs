@@ -1,9 +1,10 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, UseGuards } from '@nestjs/common';
-import { DomainDto } from './dto';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { DomainDto, SelectDomainDto } from './dto';
 import { AuthGuard } from 'src/auth/auth.guard';
 import { RolesGuard } from 'src/roles/roles.guard';
 import { Roles } from 'src/roles/roles.decorator';
 import { DomainService } from './domain.service';
+import type { UserRequest } from 'src/user/types';
 
 @Controller('domain')
 export class DomainController {
@@ -46,10 +47,10 @@ export class DomainController {
 
 
   // function of user selecting a domain
-  // @UseGuards(AuthGuard,Roles)
-
-  // selectDomain(){
-
-  // }
+  @UseGuards(AuthGuard)
+  @Post('select')
+  selectDomain(@Req() req: UserRequest, @Body() dto: SelectDomainDto){
+    return this.domainService.selectDomain(req.user.sub, dto.domainId)
+  }
   
 }
