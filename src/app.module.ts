@@ -1,13 +1,12 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
-import { BookmarkModule } from './bookmark/bookmark.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ConfigModule } from '@nestjs/config';
 import { MailsModule } from './mails/mails.module';
 import { RolesModule } from './roles/roles.module';
 import { DomainModule } from './domain/domain.module';
-import { DisplineModule } from './displine/displine.module';
+import { DisciplineModule } from './discipline/discipline.module';
 
 @Module({
   imports: [
@@ -19,10 +18,9 @@ import { DisplineModule } from './displine/displine.module';
     AuthModule,
     RolesModule,
     UserModule,
-    BookmarkModule,
     PrismaModule,
     MailsModule,
     DomainModule,
-    DisplineModule],
+    DisciplineModule],
 })
 export class AppModule { }

@@ -24,7 +24,7 @@ enum DifficultyLevel {
 // model for the roles of the user, (Admin or  User) -> 1 to many relationship with the user
 
 model Role {
-  role_id        String   @id @default(uuid())
+  role_id   String   @id @default(uuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -49,7 +49,8 @@ model User {
   roleId String
   role   Role   @relation(fields: [roleId], references: [role_id])
 
-  domains Domain[] @relation("UserDomains")
+  domains     Domain[]     @relation("UserDomains")
+  disciplines Discipline[] @relation("UserDisciplines")
 
   conceptProgress  UserConceptProgress[]
   practiceProgress UserPracticeProgress[]
@@ -89,6 +90,7 @@ model Discipline {
 
   domainId String
   domain   Domain @relation("DomainDisplines", fields: [domainId], references: [id])
+  users    User[] @relation("UserDisciplines")
 
   frameworks Framework[]
 
