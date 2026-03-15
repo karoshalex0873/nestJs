@@ -98,7 +98,7 @@ export class DomainService {
               lastName: true,
             },
           },
-          displines: {
+          disciplines: {
             select: {
               name: true,
             },

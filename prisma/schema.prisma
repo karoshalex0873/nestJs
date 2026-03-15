@@ -72,13 +72,13 @@ model Domain {
 
   users User[] @relation("UserDomains")
 
-  // relation with displine
-  displines Discipline[] @relation("DomainDisplines")
+  // relation with discipline
+  disciplines Discipline[] @relation("DomainDisciplines")
 
   @@map("domains")
 }
 
-//  displine  model (specific topic within a domain) eg Machine Learning, Web Development. 1 displine can have multiple users and 1 user can have multiple displines. Many to many relationship between user and displine
+//  discipline  model (specific topic within a domain) eg Machine Learning, Web Development. 1 discipline can have multiple users and 1 user can have multiple disciplines. Many to many relationship between user and discipline
 
 model Discipline {
   id        String   @id @default(uuid())
@@ -89,7 +89,7 @@ model Discipline {
   description String?
 
   domainId String
-  domain   Domain @relation("DomainDisplines", fields: [domainId], references: [id])
+  domain   Domain @relation("DomainDisciplines", fields: [domainId], references: [id])
   users    User[] @relation("UserDisciplines")
 
   frameworks Framework[]
@@ -109,8 +109,8 @@ model Framework {
   name        String  @unique
   description String?
 
-  displineId String
-  displine   Discipline @relation(fields: [displineId], references: [id])
+  disciplineId String
+  discipline   Discipline @relation(fields: [disciplineId], references: [id])
 
   concepts     Concept[]
   mainProjects MainProject[]

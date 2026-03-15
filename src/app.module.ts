@@ -7,6 +7,7 @@ import { MailsModule } from './mails/mails.module';
 import { RolesModule } from './roles/roles.module';
 import { DomainModule } from './domain/domain.module';
 import { DisciplineModule } from './discipline/discipline.module';
+import { FrameworkModule } from './framework/framework.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { DisciplineModule } from './discipline/discipline.module';
     PrismaModule,
     MailsModule,
     DomainModule,
-    DisciplineModule],
+    DisciplineModule,
+    FrameworkModule],
 })
 export class AppModule { }
