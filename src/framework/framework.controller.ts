@@ -1,9 +1,10 @@
-import { Controller, Get, Param, ParseUUIDPipe, UseGuards, Post, Body } from '@nestjs/common';
+import { Controller, Get, Param, ParseUUIDPipe, UseGuards, Post, Body, Patch, Delete, Req } from '@nestjs/common';
 import { AuthGuard } from 'src/auth/auth.guard';
 import { FrameworkService } from './framework.service';
 import { RolesGuard } from 'src/roles/roles.guard';
 import { Roles } from 'src/roles/roles.decorator';
-import { FrameworkDto } from './dto';
+import { FrameworkDto, UpdateFrameworkDto } from './dto';
+import type { UserRequest } from 'src/user/types';
 
 @Controller('framework')
 export class FrameworkController {
@@ -40,8 +41,29 @@ export class FrameworkController {
     // Call the service to create a new framework
     return this.frameworkService.createFramework(disciplineId, dto);
   }
-  // 4. PUT /frameworks/:id - Update a spPecific framework by ID
+  // 4. PUT /frameworks/:id - Update a spPecific framework by ID using patch for updating even single records
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('admin')
+  @Patch('update/:framework_id')
+  updateFramework(@Param('framework_id', new ParseUUIDPipe()) frameworkId: string, @Body() dto: UpdateFrameworkDto) {
+    // Call the service to update a specific framework by ID
+    return this.frameworkService.updateFramework(frameworkId, dto);
+  }
+  
   // 5. DELETE /frameworks/:id - Delete a specific framework by ID
-  // 6. SELECT /frameworks/:id - Select a specific framework by ID for the user
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('admin')
+  @Delete('delete/:framework_id')
+  deleteFramework(@Param('framework_id', new ParseUUIDPipe()) frameworkId: string) {
+    // Call the service to delete a specific framework by ID
+    return this.frameworkService.deleteFramework(frameworkId);
+  }
 
+  // 6. SELECT /frameworks/:id - Select a specific framework by ID for the user
+  @UseGuards(AuthGuard)
+  @Post('select/:framework_id')
+  selectFramework(@Req() req:UserRequest ,@Param('framework_id', new ParseUUIDPipe()) frameworkId: string) {
+    // Call the service to select a specific framework by ID for the user
+    return this.frameworkService.selectFramework(req.user.sub, frameworkId);
+  }
 }

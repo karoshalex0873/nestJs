@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString } from "class-validator";
+import { IsNotEmpty, IsOptional, IsString } from "class-validator";
 
 export class FrameworkDto {
 
@@ -8,4 +8,15 @@ export class FrameworkDto {
   
   @IsString()
   description: string;
+}
+
+export class UpdateFrameworkDto {
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  frameworkName?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
 }

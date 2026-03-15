@@ -51,6 +51,7 @@ model User {
 
   domains     Domain[]     @relation("UserDomains")
   disciplines Discipline[] @relation("UserDisciplines")
+  frameworks  Framework[]  @relation("UserFrameworks")
 
   conceptProgress  UserConceptProgress[]
   practiceProgress UserPracticeProgress[]
@@ -111,6 +112,7 @@ model Framework {
 
   disciplineId String
   discipline   Discipline @relation(fields: [disciplineId], references: [id])
+  users        User[] @relation("UserFrameworks")
 
   concepts     Concept[]
   mainProjects MainProject[]
