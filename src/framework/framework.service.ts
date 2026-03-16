@@ -272,32 +272,28 @@ export class FrameworkService {
     }
 
     // 4. prevent selecting the same framework again
-    const alreadySelected = await this.prisma.$queryRaw<Array<{ A: string; B: string }>>`
-      SELECT "A", "B"
-      FROM "_UserFrameworks"
-      WHERE "A" = ${frameworkId} AND "B" = ${userId}
-      LIMIT 1
-    `
+    const alreadySelected = await this.prisma.userFramework.findUnique({
+      where: { userId_frameworkId: { userId, frameworkId } },
+    })
 
-    if (alreadySelected.length > 0) {
+    if (alreadySelected) {
       return {
         message: `${framework.name} framework already selected`,
       }
     }
 
     // 5. save selection
-    await this.prisma.$executeRaw`
-      INSERT INTO "_UserFrameworks" ("A", "B")
-      VALUES (${frameworkId}, ${userId})
-    `
+    await this.prisma.userFramework.create({
+      data: { userId, frameworkId },
+    })
 
     const selectedFrameworks = await this.prisma.$queryRaw<Array<{ id: string; name: string; disciplineName: string; domainName: string }>>`
       SELECT f."id", f."name", d."name" AS "disciplineName", dm."name" AS "domainName"
       FROM "frameworks" f
-      INNER JOIN "_UserFrameworks" uf ON uf."A" = f."id"
+      INNER JOIN "UserFramework" uf ON uf."frameworkId" = f."id"
       INNER JOIN "disciplines" d ON d."id" = f."disciplineId"
       INNER JOIN "domains" dm ON dm."id" = d."domainId"
-      WHERE uf."B" = ${userId}
+      WHERE uf."userId" = ${userId}
       ORDER BY f."name" ASC
     `
 
