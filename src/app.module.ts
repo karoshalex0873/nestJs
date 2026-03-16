@@ -8,6 +8,8 @@ import { RolesModule } from './roles/roles.module';
 import { DomainModule } from './domain/domain.module';
 import { DisciplineModule } from './discipline/discipline.module';
 import { FrameworkModule } from './framework/framework.module';
+import { ConceptModule } from './concept/concept.module';
+import { AiModule } from './ai/ai.module';
 
 @Module({
   imports: [
@@ -23,6 +25,8 @@ import { FrameworkModule } from './framework/framework.module';
     MailsModule,
     DomainModule,
     DisciplineModule,
-    FrameworkModule],
+    FrameworkModule,
+    ConceptModule,
+    AiModule],
 })
 export class AppModule { }

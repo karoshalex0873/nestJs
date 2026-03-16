@@ -51,11 +51,12 @@ model User {
 
   domains     Domain[]     @relation("UserDomains")
   disciplines Discipline[] @relation("UserDisciplines")
-  frameworks  Framework[]  @relation("UserFrameworks")
 
   conceptProgress  UserConceptProgress[]
   practiceProgress UserPracticeProgress[]
   projectSteps     UserProjectStep[]
+  userFrameworks   UserFramework[]
+  learningSessions LearningSession[]
 
   @@map("users")
 }
@@ -94,7 +95,7 @@ model Discipline {
   users    User[] @relation("UserDisciplines")
 
   frameworks Framework[]
-
+  
   @@map("disciplines")
 }
 
@@ -112,11 +113,11 @@ model Framework {
 
   disciplineId String
   discipline   Discipline @relation(fields: [disciplineId], references: [id])
-  users        User[] @relation("UserFrameworks")
 
-  concepts     Concept[]
-  mainProjects MainProject[]
-
+  concepts       Concept[]
+  mainProjects   MainProject[]
+  userFrameworks UserFramework[]
+  @@unique([disciplineId,name])
   @@map("frameworks")
 }
 
@@ -130,17 +131,29 @@ model Concept {
   description String?
   difficulty  DifficultyLevel
 
+  // ai generated content
+  aiGenerated     Boolean @default(true)
+  aiModel         String?
+  aiPromptVersion String?
+  generationId String?
+
+  // estimated time for learing
+  estimatedMinutes Int?
+
   order Int
 
   frameworkId String
-  framework   Framework @relation(fields: [frameworkId], references: [id])
-
-  subtopics Subtopic[]
+  framework   Framework  @relation(fields: [frameworkId], references: [id])
+  subtopics   Subtopic[]
 
   projectSteps ProjectStep[]
 
-  userProgress UserConceptProgress[]
+  userProgress     UserConceptProgress[]
+  learningSessions LearningSession[]
 
+  @@unique([frameworkId, order])
+  @@unique([frameworkId, name])
+  @@index([frameworkId])
   @@map("concepts")
 }
 
@@ -160,6 +173,7 @@ model Subtopic {
 
   practiceQuestions PracticeQuestion[]
 
+  @@unique([conceptId, order])
   @@map("subtopics")
 }
 
@@ -181,7 +195,7 @@ model PracticeQuestion {
   subtopic   Subtopic @relation(fields: [subtopicId], references: [id])
 
   userProgress UserPracticeProgress[]
-
+  @@index([subtopicId])
   @@map("practice_questions")
 }
 
@@ -221,6 +235,8 @@ model ProjectStep {
 
   userProgress UserProjectStep[]
 
+  @@unique([mainProjectId, order])
+  @@index([conceptId])
   @@map("project_steps")
 }
 
@@ -229,6 +245,9 @@ model UserConceptProgress {
 
   userId    String
   conceptId String
+
+  attempts Int  @default(0)
+  score    Int?
 
   completed   Boolean   @default(false)
   completedAt DateTime?
@@ -270,4 +289,43 @@ model UserProjectStep {
 
   @@unique([userId, stepId])
   @@map("user_project_steps")
+}
+
+// Tracks the user's active framework
+model UserFramework {
+  id String @id @default(uuid())
+
+  userId      String
+  frameworkId String
+
+  startedAt DateTime @default(now())
+  active    Boolean  @default(true)
+
+  user      User      @relation(fields: [userId], references: [id])
+  framework Framework @relation(fields: [frameworkId], references: [id])
+
+  @@unique([userId, frameworkId])
+  @@index([userId, active])
+}
+
+// Add learning sessions (daily concept logic)
+
+// Since concepts are delivered daily, you must track sessions.
+
+model LearningSession {
+  id String @id @default(uuid())
+
+  userId    String
+  conceptId String
+
+  date      DateTime @default(now())
+  completed Boolean  @default(false)
+  day       DateTime
+
+  user    User    @relation(fields: [userId], references: [id])
+  concept Concept @relation(fields: [conceptId], references: [id])
+
+  @@unique([userId, day])
+  @@index([userId])
+  @@index([conceptId])
 }
