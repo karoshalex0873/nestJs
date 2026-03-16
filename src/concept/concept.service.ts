@@ -235,7 +235,7 @@ Return ONLY a valid JSON object — no markdown, no explanation, no code fences 
 
 Rules:
 - Include 2 to 4 subtopics that logically break down the concept.
-- Include 1 to 3 practice questions per subtopic.
+- Include 1 to 3 practice questions per subtopic and involves practical codding.
 - Choose difficulty based on the concept's position (order ${payload.nextConceptOrder}) in the path.
 - Keep the content accurate, practical, and relevant to ${payload.framework}.
 - Output ONLY the JSON object. Do not wrap it in markdown or add any extra text.
