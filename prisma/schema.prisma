@@ -59,6 +59,7 @@ model User {
   learningSessions LearningSession[]
 
   @@map("users")
+  userConceptProjects UserConceptProject[]
 }
 
 // Model  for Domain (area of study) eg Data Science, Software . 1 user can have mutiple domains and 1 domain can have multiple users. Many to many relationship between user and domain
@@ -95,7 +96,7 @@ model Discipline {
   users    User[] @relation("UserDisciplines")
 
   frameworks Framework[]
-  
+
   @@map("disciplines")
 }
 
@@ -117,7 +118,8 @@ model Framework {
   concepts       Concept[]
   mainProjects   MainProject[]
   userFrameworks UserFramework[]
-  @@unique([disciplineId,name])
+
+  @@unique([disciplineId, name])
   @@map("frameworks")
 }
 
@@ -131,21 +133,26 @@ model Concept {
   description String?
   difficulty  DifficultyLevel
 
-  // ai generated content
+  //AI metadata
   aiGenerated     Boolean @default(true)
   aiModel         String?
   aiPromptVersion String?
-  generationId String?
+  generationId    String?
 
-  // estimated time for learing
+  // Learning intelligence
+  learningObjectives String[]
+  evaluationCriteria String[]
+
+  // Mini project (AI generated)
+  project Json?
+
   estimatedMinutes Int?
-
-  order Int
+  order            Int
 
   frameworkId String
-  framework   Framework  @relation(fields: [frameworkId], references: [id])
-  subtopics   Subtopic[]
+  framework   Framework @relation(fields: [frameworkId], references: [id])
 
+  subtopics    Subtopic[]
   projectSteps ProjectStep[]
 
   userProgress     UserConceptProgress[]
@@ -155,6 +162,7 @@ model Concept {
   @@unique([frameworkId, name])
   @@index([frameworkId])
   @@map("concepts")
+  userConceptProjects UserConceptProject[]
 }
 
 // model subtopic (specific topic within a concept) eg Decision Trees, React Hooks. one concept can have many subtopics and one subtopic can belong to one concept. One to many relationship between concept and subtopic
@@ -166,7 +174,10 @@ model Subtopic {
   name        String
   description String?
 
-  order Int
+  // New: Code examples
+  examples Json?
+  
+  order    Int
 
   conceptId String
   concept   Concept @relation(fields: [conceptId], references: [id])
@@ -195,6 +206,7 @@ model PracticeQuestion {
   subtopic   Subtopic @relation(fields: [subtopicId], references: [id])
 
   userProgress UserPracticeProgress[]
+
   @@index([subtopicId])
   @@map("practice_questions")
 }
@@ -251,6 +263,9 @@ model UserConceptProgress {
 
   completed   Boolean   @default(false)
   completedAt DateTime?
+
+  projectScore Int? // optional score for the mini project
+  projectCompleted Boolean @default(false)
 
   user    User    @relation(fields: [userId], references: [id])
   concept Concept @relation(fields: [conceptId], references: [id])
@@ -328,4 +343,22 @@ model LearningSession {
   @@unique([userId, day])
   @@index([userId])
   @@index([conceptId])
+}
+
+
+model UserConceptProject {
+  id String @id @default(uuid())
+
+  userId    String
+  conceptId String
+
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+
+  score Int? // optional evaluation score
+
+  user    User    @relation(fields: [userId], references: [id])
+  concept Concept @relation(fields: [conceptId], references: [id])
+
+  @@unique([userId, conceptId])
 }

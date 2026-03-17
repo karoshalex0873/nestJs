@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { AiService } from '../ai/ai.service';
 import { PrismaService } from '../prisma/prisma.service';
 @Injectable()
@@ -78,8 +78,8 @@ export class ConceptService {
       }
     })
 
-    if (nextConcept) {
-      return nextConcept
+    if (nextConcept && this.isConceptUsable(nextConcept)) {
+      return this.formatConceptResponse(nextConcept)
     }
 
     // 5. Generate a concept using the AI service
@@ -93,24 +93,80 @@ export class ConceptService {
     }
 
     const prompt = this.buildConceptPrompt(aiPayload)
-    const rawJson = await this.aiService.generateText(prompt)
+    let generatedConcept: any = null
 
-    if (!rawJson) {
-      throw new Error('AI service returned an empty response')
+    // Retry mechanism includes the first generation attempt.
+    for (let i = 0; i < 3; i++) {
+      const rawJson = await this.aiService.generateText(prompt)
+
+      if (!rawJson) {
+        if (i === 2) {
+          throw new ConflictException(`Failed to generate valid concept after ${i + 1} attempts`)
+        }
+        continue
+      }
+
+      try {
+        const parsed = JSON.parse(rawJson)
+        this.validateGeneratedConcept(parsed)
+
+        generatedConcept = parsed
+        break
+      } catch (error) {
+        if (i === 2) {
+          throw new ConflictException(`Failed to generate valid concept after ${i + 1} attempts`)
+        }
+      }
     }
 
-    const generatedConcept = JSON.parse(rawJson)
+    let conceptId: string
 
-    const createdConcept = await this.prismaService.concept.create({
-      data: {
-        name: generatedConcept.name,
-        description: generatedConcept.description,
-        difficulty: generatedConcept.difficulty,
-        estimatedMinutes: generatedConcept.estimatedMinutes,
-        frameworkId: userFramework.frameworkId,
-        order: nextOrder,
-      },
-    })
+    if (nextConcept) {
+      await this.prismaService.practiceQuestion.deleteMany({
+        where: {
+          subtopic: {
+            conceptId: nextConcept.id
+          }
+        }
+      })
+
+      await this.prismaService.subtopic.deleteMany({
+        where: {
+          conceptId: nextConcept.id
+        }
+      })
+
+      const updatedConcept = await this.prismaService.concept.update({
+        where: { id: nextConcept.id },
+        data: {
+          name: generatedConcept.name,
+          description: generatedConcept.description,
+          difficulty: generatedConcept.difficulty,
+          estimatedMinutes: generatedConcept.estimatedMinutes,
+          learningObjectives: generatedConcept.learningObjectives,
+          evaluationCriteria: generatedConcept.evaluationCriteria,
+          project: generatedConcept.project
+        },
+      })
+
+      conceptId = updatedConcept.id
+    } else {
+      const createdConcept = await this.prismaService.concept.create({
+        data: {
+          name: generatedConcept.name,
+          description: generatedConcept.description,
+          difficulty: generatedConcept.difficulty,
+          estimatedMinutes: generatedConcept.estimatedMinutes,
+          frameworkId: userFramework.frameworkId,
+          order: nextOrder,
+          learningObjectives: generatedConcept.learningObjectives,
+          evaluationCriteria: generatedConcept.evaluationCriteria,
+          project: generatedConcept.project
+        },
+      })
+
+      conceptId = createdConcept.id
+    }
 
     // 6. Save the generated concept to the database
     for (let i = 0; i < generatedConcept.subtopics.length; i++) {
@@ -122,7 +178,8 @@ export class ConceptService {
           name: subtopicData.name,
           description: subtopicData.description,
           order: i + 1,
-          conceptId: createdConcept.id
+          conceptId,
+          examples: subtopicData.examples,
         }
       })
 
@@ -146,14 +203,14 @@ export class ConceptService {
     await this.prismaService.learningSession.create({
       data: {
         userId,
-        conceptId: createdConcept.id,
+        conceptId,
         day: new Date()
       }
     })
 
     //  Return the final concept
     const savedConcept = await this.prismaService.concept.findUnique({
-      where: { id: createdConcept.id },
+      where: { id: conceptId },
       include: {
         subtopics: {
           include: {
@@ -167,22 +224,7 @@ export class ConceptService {
       throw new NotFoundException('Generated concept could not be loaded after creation')
     }
 
-    return {
-      name: savedConcept.name,
-      description: savedConcept.description,
-      difficulty: savedConcept.difficulty,
-      estimatedMinutes: savedConcept.estimatedMinutes,
-      subtopics: savedConcept.subtopics.map((subtopic) => ({
-        name: subtopic.name,
-        description: subtopic.description,
-        practiceQuestions: subtopic.practiceQuestions.map((question) => ({
-          title: question.title,
-          question: question.question,
-          answer: question.answer,
-          difficulty: question.difficulty,
-        })),
-      })),
-    }
+    return this.formatConceptResponse(savedConcept)
   }
 
   // Build the prompt string that instructs the AI what to generate
@@ -198,48 +240,212 @@ export class ConceptService {
       : `This is the learner's first concept.`
 
     return `
-        You are generating structured learning content for a personal growth platform.
+Generate the next concept in a progressive, hands-on coding path.
+
+Goal:
+- Build real skills through implementation, debugging, and delivery.
+- No theory-only learning.
 
 Context:
 - Domain: ${payload.domain}
 - Discipline: ${payload.discipline}
-- Framework / Technology: ${payload.framework}
+- Framework: ${payload.framework}
 - ${previousContext}
-- This is concept number ${payload.nextConceptOrder} in the learning path.
+- Concept number: ${payload.nextConceptOrder}
 
-Task:
-Generate the next logical concept for the learner to study.
+Rules (short and strict):
+- Follow the official learning progression for ${payload.framework}.
+- Keep the concept as the logical next step.
+- Do not skip prerequisites or jump to advanced topics.
+- Keep tasks practical, production-like, and outcome-focused.
+- Every practice question must require writing or fixing real code.
+- No "what is", "define", or explanation-only questions.
+- Use realistic constraints (bugs, features, refactors, tests, performance, reliability, maintainability).
 
-Return ONLY a valid JSON object — no markdown, no explanation, no code fences — in exactly this shape:
+Output format:
+- Return JSON only.
+- No markdown.
+- No extra text.
+
+Use exactly this JSON shape:
 
 {
   "name": "<concept name>",
-  "description": "<clear 1-2 sentence description of the concept>",
+  "description": "<clear practical explanation>",
   "difficulty": "<BEGINNER | INTERMEDIATE | ADVANCED>",
-  "estimatedMinutes": <number>,
+  "estimatedMinutes": <realistic time>,
+
+  "learningObjectives": [
+    "<actionable outcome>",
+    "<actionable outcome>"
+  ],
+
+  "evaluationCriteria": [
+    "<how to verify correctness>",
+    "<how to measure quality>"
+  ],
+
+  "project": {
+    "title": "<mini project>",
+    "description": "<what to build>",
+    "requirements": [
+      "<functional requirement>",
+      "<functional requirement>"
+    ],
+    "expectedOutcome": "<working result>"
+  },
+
   "subtopics": [
     {
-      "name": "<subtopic name>",
-      "description": "<clear 1-2 sentence description>",
+      "name": "<subtopic>",
+      "description": "<practical explanation>",
+
+      "examples": [
+        {
+          "title": "<example>",
+          "code": "<real working code>",
+          "explanation": "<why it works>"
+        }
+      ],
+
       "practiceQuestions": [
         {
-          "title": "<short question title>",
-          "question": "<the full question>",
-          "answer": "<concise but complete answer>",
+          "title": "<implementation task with real-world context>",
+          "question": "<real coding task tied to a real scenario>",
+          "answer": "<solution with code>",
+          "difficulty": "<BEGINNER | INTERMEDIATE | ADVANCED>"
+        },
+        {
+          "title": "<debugging, optimization, or reliability task>",
+          "question": "<broken or incomplete real-world scenario>",
+          "answer": "<fixed solution>",
           "difficulty": "<BEGINNER | INTERMEDIATE | ADVANCED>"
         }
       ]
     }
   ]
 }
-
-Rules:
-- Include 2 to 4 subtopics that logically break down the concept.
-- Include 1 to 3 practice questions per subtopic and involves practical codding.
-- Choose difficulty based on the concept's position (order ${payload.nextConceptOrder}) in the path.
-- Keep the content accurate, practical, and relevant to ${payload.framework}.
-- Output ONLY the JSON object. Do not wrap it in markdown or add any extra text.
 `.trim()
+  }
+
+
+  private validateGeneratedConcept(concept: any) {
+
+    // 1. Ensure required fields exist
+    if (!concept.learningObjectives?.length) {
+      throw new Error('Invalid AI output: Missing learning objectives')
+    }
+
+    if (!concept.evaluationCriteria?.length) {
+      throw new Error('Invalid AI output: Missing evaluation criteria')
+    }
+
+    if (!concept.project) {
+      throw new Error('Invalid AI output: Missing project')
+    }
+
+    for (const subtopic of concept.subtopics || []) {
+
+      // 2. Ensure examples exist
+      if (!subtopic.examples || subtopic.examples.length === 0) {
+        throw new Error(`Invalid AI output: Subtopic "${subtopic.name}" missing examples`)
+      }
+
+      if (!subtopic.practiceQuestions || subtopic.practiceQuestions.length === 0) {
+        throw new Error(`Invalid AI output: Subtopic "${subtopic.name}" missing practice questions`)
+      }
+
+      for (const q of subtopic.practiceQuestions || []) {
+
+        const questionText = `${q.title || ''} ${q.question || ''}`.toLowerCase()
+
+        // 3. Reject theoretical questions
+        const forbiddenPatterns = [
+          'what is',
+          'define',
+          'explain',
+          'why',
+          'difference between',
+          'compare',
+          'which decorator',
+          'what does',
+          'what command'
+        ]
+
+        const isTheoretical = forbiddenPatterns.some(p => questionText.includes(p))
+
+        if (isTheoretical) {
+          throw new Error(`Invalid AI output: Theoretical question detected -> "${q.title}"`)
+        }
+
+        // 4. Enforce coding requirement
+        const mustContain = [
+          'create',
+          'implement',
+          'build',
+          'fix',
+          'write',
+          'modify',
+          'refactor',
+          'debug',
+          'optimize',
+          'add',
+          'update',
+          'complete',
+          'integrate',
+          'test',
+          'bootstrap',
+          'endpoint',
+          'api',
+          'function',
+          'class',
+          'module'
+        ]
+
+        const hasCodingIntent = mustContain.some(p => questionText.includes(p))
+
+        if (!hasCodingIntent) {
+          throw new Error(`Invalid AI output: Question is not a coding task -> "${q.title}"`)
+        }
+
+        // 5. Ensure answer contains code
+        if (!q.answer.includes('{') || !q.answer.includes('}')) {
+          throw new Error(`Invalid AI output: Answer likely missing code -> "${q.title}"`)
+        }
+      }
+    }
+  }
+
+  private isConceptUsable(concept: any): boolean {
+    try {
+      this.validateGeneratedConcept(concept)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  private formatConceptResponse(concept: any) {
+    return {
+      name: concept.name,
+      description: concept.description,
+      difficulty: concept.difficulty,
+      estimatedMinutes: concept.estimatedMinutes,
+      learningObjectives: concept.learningObjectives,
+      evaluationCriteria: concept.evaluationCriteria,
+      project: concept.project,
+      subtopics: (concept.subtopics || []).map((subtopic: any) => ({
+        name: subtopic.name,
+        description: subtopic.description,
+        examples: subtopic.examples,
+        practiceQuestions: (subtopic.practiceQuestions || []).map((question: any) => ({
+          title: question.title,
+          question: question.question,
+          answer: question.answer,
+          difficulty: question.difficulty,
+        })),
+      })),
+    }
   }
 }
 
