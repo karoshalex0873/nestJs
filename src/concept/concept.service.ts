@@ -447,5 +447,11 @@ Use exactly this JSON shape:
       })),
     }
   }
+
+
+  // method to get the concept for the logging user
+  async getConcept(userId: string) {
+    
+  }
 }
 
