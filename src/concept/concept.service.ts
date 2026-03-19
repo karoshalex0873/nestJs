@@ -1,6 +1,44 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
+import { validateSync } from 'class-validator';
 import { AiService } from '../ai/ai.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CompleteConceptDto, ConceptAiDto } from './dto';
+
+type GeneratedPracticeQuestion = {
+  title: string
+  question: string
+  answer: string
+  difficulty: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED'
+}
+
+type GeneratedSubtopic = {
+  name: string
+  description: string
+  examples: Array<{
+    title: string
+    code: string
+    explanation: string
+  }>
+  practiceQuestions: GeneratedPracticeQuestion[]
+}
+
+type GeneratedConcept = {
+  name: string
+  description: string
+  difficulty: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED'
+  estimatedMinutes: number | null
+  learningObjectives: string[]
+  evaluationCriteria: string[]
+  project: {
+    title: string
+    description: string
+    requirements: string[]
+    expectedOutcome: string
+  }
+  subtopics: GeneratedSubtopic[]
+}
+
 @Injectable()
 export class ConceptService {
 
@@ -11,9 +49,16 @@ export class ConceptService {
     private prismaService: PrismaService
   ) { }
 
-  // method to develop a concept for learning using ai service to pass the data
+  // Generates or reuses today's concept for the user and persists the session.
   async createConcept(userId: string) {
-    // Identify the user’s active framework
+    const todayRange = this.getDayRange(new Date())
+
+    const existingSession = await this.findTodaysSession(userId, todayRange)
+    if (existingSession?.concept && this.isConceptUsable(existingSession.concept)) {
+      return this.formatConceptResponse(existingSession.concept)
+    }
+
+    const sessionDay = existingSession?.day ?? todayRange.start
 
     const userFramework = await this.prismaService.userFramework.findFirst({
       where: {
@@ -37,7 +82,6 @@ export class ConceptService {
       throw new NotFoundException('No active framework found for the user')
     }
 
-    // 2. Find the last completed concept (showing the progress of the user)
     const lastCompletedConcept = await this.prismaService.userConceptProgress.findFirst({
       where: {
         userId,
@@ -56,12 +100,8 @@ export class ConceptService {
       }
     })
 
-
-    // 3. Determine the next concept order
     const nextOrder = lastCompletedConcept ? lastCompletedConcept.concept.order + 1 : 1
-    // If the user has never completed a concept, they start at order 1.
 
-    // 4.  Check if the concept already exists
     const nextConcept = await this.prismaService.concept.findUnique({
       where: {
         frameworkId_order: {
@@ -79,11 +119,10 @@ export class ConceptService {
     })
 
     if (nextConcept && this.isConceptUsable(nextConcept)) {
+      await this.upsertLearningSession(userId, nextConcept.id, sessionDay)
       return this.formatConceptResponse(nextConcept)
     }
 
-    // 5. Generate a concept using the AI service
-    //  payload for the ai service
     const aiPayload = {
       domain: userFramework.framework.discipline.domain.name,
       discipline: userFramework.framework.discipline.name,
@@ -93,65 +132,64 @@ export class ConceptService {
     }
 
     const prompt = this.buildConceptPrompt(aiPayload)
-    let generatedConcept: any = null
+    const generatedConcept = await this.generateConceptFromAi(prompt)
 
-    // Retry mechanism includes the first generation attempt.
-    for (let i = 0; i < 3; i++) {
-      const rawJson = await this.aiService.generateText(prompt)
-
-      if (!rawJson) {
-        if (i === 2) {
-          throw new ConflictException(`Failed to generate valid concept after ${i + 1} attempts`)
-        }
-        continue
+    const subtopicCreates = generatedConcept.subtopics.map((subtopic, index) => ({
+      name: subtopic.name,
+      description: subtopic.description,
+      order: index + 1,
+      examples: subtopic.examples,
+      practiceQuestions: {
+        create: subtopic.practiceQuestions.map(question => ({
+          title: question.title,
+          question: question.question,
+          answer: question.answer,
+          difficulty: question.difficulty,
+        }))
       }
+    }))
 
-      try {
-        const parsed = JSON.parse(rawJson)
-        this.validateGeneratedConcept(parsed)
+    const conceptRecord = await this.prismaService.$transaction(async tx => {
+      if (nextConcept) {
+        await tx.practiceQuestion.deleteMany({
+          where: {
+            subtopic: {
+              conceptId: nextConcept.id
+            }
+          }
+        })
 
-        generatedConcept = parsed
-        break
-      } catch (error) {
-        if (i === 2) {
-          throw new ConflictException(`Failed to generate valid concept after ${i + 1} attempts`)
-        }
-      }
-    }
-
-    let conceptId: string
-
-    if (nextConcept) {
-      await this.prismaService.practiceQuestion.deleteMany({
-        where: {
-          subtopic: {
+        await tx.subtopic.deleteMany({
+          where: {
             conceptId: nextConcept.id
           }
-        }
-      })
+        })
 
-      await this.prismaService.subtopic.deleteMany({
-        where: {
-          conceptId: nextConcept.id
-        }
-      })
+        return tx.concept.update({
+          where: { id: nextConcept.id },
+          data: {
+            name: generatedConcept.name,
+            description: generatedConcept.description,
+            difficulty: generatedConcept.difficulty,
+            estimatedMinutes: generatedConcept.estimatedMinutes,
+            learningObjectives: generatedConcept.learningObjectives,
+            evaluationCriteria: generatedConcept.evaluationCriteria,
+            project: generatedConcept.project,
+            subtopics: {
+              create: subtopicCreates
+            }
+          },
+          include: {
+            subtopics: {
+              include: {
+                practiceQuestions: true
+              }
+            }
+          }
+        })
+      }
 
-      const updatedConcept = await this.prismaService.concept.update({
-        where: { id: nextConcept.id },
-        data: {
-          name: generatedConcept.name,
-          description: generatedConcept.description,
-          difficulty: generatedConcept.difficulty,
-          estimatedMinutes: generatedConcept.estimatedMinutes,
-          learningObjectives: generatedConcept.learningObjectives,
-          evaluationCriteria: generatedConcept.evaluationCriteria,
-          project: generatedConcept.project
-        },
-      })
-
-      conceptId = updatedConcept.id
-    } else {
-      const createdConcept = await this.prismaService.concept.create({
+      return tx.concept.create({
         data: {
           name: generatedConcept.name,
           description: generatedConcept.description,
@@ -161,70 +199,24 @@ export class ConceptService {
           order: nextOrder,
           learningObjectives: generatedConcept.learningObjectives,
           evaluationCriteria: generatedConcept.evaluationCriteria,
-          project: generatedConcept.project
+          project: generatedConcept.project,
+          subtopics: {
+            create: subtopicCreates
+          }
         },
-      })
-
-      conceptId = createdConcept.id
-    }
-
-    // 6. Save the generated concept to the database
-    for (let i = 0; i < generatedConcept.subtopics.length; i++) {
-
-      const subtopicData = generatedConcept.subtopics[i]
-
-      const subtopic = await this.prismaService.subtopic.create({
-        data: {
-          name: subtopicData.name,
-          description: subtopicData.description,
-          order: i + 1,
-          conceptId,
-          examples: subtopicData.examples,
-        }
-      })
-
-      for (const question of subtopicData.practiceQuestions) {
-        await this.prismaService.practiceQuestion.create({
-          data: {
-            title: question.title,
-            question: question.question,
-            answer: question.answer,
-            difficulty: question.difficulty,
-            subtopicId: subtopic.id
-          }
-        })
-      }
-
-
-
-    }
-
-    // Create a learning session
-    await this.prismaService.learningSession.create({
-      data: {
-        userId,
-        conceptId,
-        day: new Date()
-      }
-    })
-
-    //  Return the final concept
-    const savedConcept = await this.prismaService.concept.findUnique({
-      where: { id: conceptId },
-      include: {
-        subtopics: {
-          include: {
-            practiceQuestions: true
+        include: {
+          subtopics: {
+            include: {
+              practiceQuestions: true
+            }
           }
         }
-      }
+      })
     })
 
-    if (!savedConcept) {
-      throw new NotFoundException('Generated concept could not be loaded after creation')
-    }
+    await this.upsertLearningSession(userId, conceptRecord.id, sessionDay)
 
-    return this.formatConceptResponse(savedConcept)
+    return this.formatConceptResponse(conceptRecord)
   }
 
   // Build the prompt string that instructs the AI what to generate
@@ -240,11 +232,7 @@ export class ConceptService {
       : `This is the learner's first concept.`
 
     return `
-Generate the next concept in a progressive, hands-on coding path.
-
-Goal:
-- Build real skills through implementation, debugging, and delivery.
-- No theory-only learning.
+Generate the next concept in a progressive, hands-on learning path.
 
 Context:
 - Domain: ${payload.domain}
@@ -253,14 +241,10 @@ Context:
 - ${previousContext}
 - Concept number: ${payload.nextConceptOrder}
 
-Rules (short and strict):
-- Follow the official learning progression for ${payload.framework}.
+Rules (simple):
 - Keep the concept as the logical next step.
-- Do not skip prerequisites or jump to advanced topics.
-- Keep tasks practical, production-like, and outcome-focused.
-- Every practice question must require writing or fixing real code.
-- No "what is", "define", or explanation-only questions.
-- Use realistic constraints (bugs, features, refactors, tests, performance, reliability, maintainability).
+- Use short, clear language.
+- Keep examples and practice questions practical.
 
 Output format:
 - Return JSON only.
@@ -329,90 +313,23 @@ Use exactly this JSON shape:
   }
 
 
-  private validateGeneratedConcept(concept: any) {
+  private validateGeneratedConcept(concept: GeneratedConcept) {
+    const instance = plainToInstance(ConceptAiDto, concept)
+    const errors = validateSync(instance, {
+      whitelist: true,
+      forbidUnknownValues: false
+    })
 
-    // 1. Ensure required fields exist
-    if (!concept.learningObjectives?.length) {
-      throw new Error('Invalid AI output: Missing learning objectives')
+    if (errors.length > 0) {
+      throw new Error(`Invalid AI output: ${this.formatValidationErrors(errors)}`)
     }
 
-    if (!concept.evaluationCriteria?.length) {
-      throw new Error('Invalid AI output: Missing evaluation criteria')
+    if (!instance.subtopics?.length) {
+      throw new Error('Invalid AI output: Missing subtopics')
     }
 
-    if (!concept.project) {
-      throw new Error('Invalid AI output: Missing project')
-    }
-
-    for (const subtopic of concept.subtopics || []) {
-
-      // 2. Ensure examples exist
-      if (!subtopic.examples || subtopic.examples.length === 0) {
-        throw new Error(`Invalid AI output: Subtopic "${subtopic.name}" missing examples`)
-      }
-
-      if (!subtopic.practiceQuestions || subtopic.practiceQuestions.length === 0) {
-        throw new Error(`Invalid AI output: Subtopic "${subtopic.name}" missing practice questions`)
-      }
-
-      for (const q of subtopic.practiceQuestions || []) {
-
-        const questionText = `${q.title || ''} ${q.question || ''}`.toLowerCase()
-
-        // 3. Reject theoretical questions
-        const forbiddenPatterns = [
-          'what is',
-          'define',
-          'explain',
-          'why',
-          'difference between',
-          'compare',
-          'which decorator',
-          'what does',
-          'what command'
-        ]
-
-        const isTheoretical = forbiddenPatterns.some(p => questionText.includes(p))
-
-        if (isTheoretical) {
-          throw new Error(`Invalid AI output: Theoretical question detected -> "${q.title}"`)
-        }
-
-        // 4. Enforce coding requirement
-        const mustContain = [
-          'create',
-          'implement',
-          'build',
-          'fix',
-          'write',
-          'modify',
-          'refactor',
-          'debug',
-          'optimize',
-          'add',
-          'update',
-          'complete',
-          'integrate',
-          'test',
-          'bootstrap',
-          'endpoint',
-          'api',
-          'function',
-          'class',
-          'module'
-        ]
-
-        const hasCodingIntent = mustContain.some(p => questionText.includes(p))
-
-        if (!hasCodingIntent) {
-          throw new Error(`Invalid AI output: Question is not a coding task -> "${q.title}"`)
-        }
-
-        // 5. Ensure answer contains code
-        if (!q.answer.includes('{') || !q.answer.includes('}')) {
-          throw new Error(`Invalid AI output: Answer likely missing code -> "${q.title}"`)
-        }
-      }
+    if (!instance.subtopics.some(subtopic => subtopic.practiceQuestions?.length)) {
+      throw new Error('Invalid AI output: Missing practice questions')
     }
   }
 
@@ -451,7 +368,196 @@ Use exactly this JSON shape:
 
   // method to get the concept for the logging user
   async getConcept(userId: string) {
-    
+    const todayRange = this.getDayRange(new Date())
+    const todaysSession = await this.findTodaysSession(userId, todayRange)
+
+    if (!todaysSession) {
+      return this.createConcept(userId)
+    }
+
+    if (!todaysSession.concept) {
+      throw new NotFoundException('Learning session exists but concept is missing')
+    }
+
+    return this.formatConceptResponse(todaysSession.concept)
+  }
+
+  private async generateConceptFromAi(prompt: string): Promise<GeneratedConcept> {
+    let lastErrorMessage = ''
+
+    for (let i = 0; i < 3; i++) {
+      const rawJson = await this.aiService.generateText(prompt)
+
+      if (!rawJson) {
+        if (i === 2) {
+          throw new ConflictException(`Failed to generate valid concept after ${i + 1} attempts`)
+        }
+        continue
+      }
+
+      try {
+        const parsed = JSON.parse(rawJson) as GeneratedConcept
+        this.validateGeneratedConcept(parsed)
+        return parsed
+      } catch (error) {
+        lastErrorMessage = error instanceof Error ? error.message : 'Invalid AI output'
+        if (i === 2) {
+          throw new ConflictException(`Failed to generate valid concept after ${i + 1} attempts: ${lastErrorMessage}`)
+        }
+      }
+    }
+
+    throw new ConflictException('Failed to generate valid concept')
+  }
+
+  private formatValidationErrors(errors: Array<{ property: string; constraints?: Record<string, string>; children?: any[] }>) {
+    const messages: string[] = []
+
+    const walk = (items: Array<{ property: string; constraints?: Record<string, string>; children?: any[] }>, path = '') => {
+      for (const item of items) {
+        const nextPath = path ? `${path}.${item.property}` : item.property
+        if (item.constraints) {
+          messages.push(`${nextPath}: ${Object.values(item.constraints).join(', ')}`)
+        }
+        if (item.children?.length) {
+          walk(item.children, nextPath)
+        }
+      }
+    }
+
+    walk(errors)
+
+    return messages.join(' | ')
+  }
+
+  private getDayRange(date: Date) {
+    const start = new Date(date)
+    start.setUTCHours(0, 0, 0, 0)
+    const end = new Date(start)
+    end.setUTCDate(end.getUTCDate() + 1)
+
+    return { start, end }
+  }
+
+  private async findTodaysSession(userId: string, range: { start: Date; end: Date }) {
+    return this.prismaService.learningSession.findFirst({
+      where: {
+        userId,
+        day: {
+          gte: range.start,
+          lt: range.end
+        }
+      },
+      include: {
+        concept: {
+          include: {
+            subtopics: {
+              include: {
+                practiceQuestions: true
+              }
+            }
+          }
+        }
+      }
+    })
+  }
+
+  private async upsertLearningSession(userId: string, conceptId: string, day: Date) {
+    await this.prismaService.learningSession.upsert({
+      where: {
+        userId_day: {
+          userId,
+          day
+        }
+      },
+      create: {
+        userId,
+        conceptId,
+        day
+      },
+      update: {
+        conceptId
+      }
+    })
+  }
+
+
+  // Marks a concept as completed for the user and records progress.
+  // Request body (all optional):
+  // - conceptId: explicit concept to complete (defaults to today's session concept)
+  // - score: concept score
+  // - projectScore: mini project score
+  // - projectCompleted: whether the mini project is completed
+  // - feedback: short completion note
+  // Behavior: upserts progress + project records and closes today's session when applicable.
+  async completeConcept(userId: string, payload: CompleteConceptDto) {
+    // Resolve today's session so we can default to the current concept.
+    const todayRange = this.getDayRange(new Date())
+    const todaysSession = await this.findTodaysSession(userId, todayRange)
+
+    // Allow explicit concept completion or fall back to today's concept.
+    const conceptId = payload.conceptId ?? todaysSession?.conceptId
+
+    if (!conceptId) {
+      throw new NotFoundException('No learning session found for today')
+    }
+
+    // Single timestamp used for completion and optional project completion.
+    const completedAt = new Date()
+
+    await this.prismaService.$transaction(async tx => {
+      // Upsert progress so repeated calls update score/feedback safely.
+      await tx.userConceptProgress.upsert({
+        where: {
+          userId_conceptId: { userId, conceptId }
+        },
+        create: {
+          userId,
+          conceptId,
+          completed: true,
+          completedAt,
+          score: payload.score,
+          projectScore: payload.projectScore,
+          projectCompleted: payload.projectCompleted ?? false,
+          feedback: payload.feedback
+        },
+        update: {
+          completed: true,
+          completedAt,
+          score: payload.score,
+          projectScore: payload.projectScore,
+          projectCompleted: payload.projectCompleted ?? false,
+          feedback: payload.feedback
+        }
+      })
+
+      // Create or update the user's concept project record for scoring.
+      await tx.userConceptProject.upsert({
+        where: {
+          userId_conceptId: { userId, conceptId }
+        },
+        create: {
+          userId,
+          conceptId,
+          completedAt: payload.projectCompleted ? completedAt : null,
+          score: payload.projectScore
+        },
+        update: {
+          completedAt: payload.projectCompleted ? completedAt : null,
+          score: payload.projectScore
+        }
+      })
+
+      // Mark today's session as completed when it is the active concept.
+      if (todaysSession?.id && !payload.conceptId) {
+        await tx.learningSession.update({
+          where: { id: todaysSession.id },
+          data: { completed: true }
+        })
+      }
+    })
+
+    return { message: 'Concept marked as completed', conceptId }
   }
 }
 

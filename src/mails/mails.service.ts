@@ -5,9 +5,6 @@ import nodemailer from 'nodemailer';
 @Injectable()
 export class MailsService {
 
-
-
-
   async sendMail(dto: SendMailDto) {
 
     try {

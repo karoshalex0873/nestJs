@@ -2,6 +2,7 @@ import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import { ConceptService } from './concept.service';
 import { AuthGuard } from 'src/auth/auth.guard';
 import type { UserRequest } from 'src/user/types';
+import { CompleteConceptDto } from './dto';
 
 @Controller('concept')
 export class ConceptController {
@@ -9,17 +10,24 @@ export class ConceptController {
     private conceptService: ConceptService
   ) { }
 
-  // method to a add a concept for learning a
+  // Creates or returns today's learning concept for the user.
   @UseGuards(AuthGuard)
   @Post('create')
-  createConcept(@Req() req:UserRequest) {
+  createConcept(@Req() req: UserRequest) {
     return this.conceptService.createConcept(req.user.sub)
   }
 
-  // method to get the concept for the logging user 
+  // Fetches today's concept (or creates it if missing).
   @UseGuards(AuthGuard)
   @Get('get')
-  getConcept(@Req() req:UserRequest) {
+  getConcept(@Req() req: UserRequest) {
     return this.conceptService.getConcept(req.user.sub)
+  }
+
+  //  Marks today's concept as completed for the user.
+  @UseGuards(AuthGuard)
+  @Post('complete')
+  completeConcept(@Req() req: UserRequest, @Body() body: CompleteConceptDto) {
+    return this.conceptService.completeConcept(req.user.sub, body)
   }
 }
