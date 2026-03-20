@@ -49,16 +49,9 @@ export class ConceptService {
     private prismaService: PrismaService
   ) { }
 
-  // Generates or reuses today's concept for the user and persists the session.
+  // Generates concepts for the user based on their active framework and current progress. This is the core of the learning experience, where we use AI to create personalized, progressive learning content.
   async createConcept(userId: string) {
     const todayRange = this.getDayRange(new Date())
-
-    const existingSession = await this.findTodaysSession(userId, todayRange)
-    if (existingSession?.concept && this.isConceptUsable(existingSession.concept)) {
-      return this.formatConceptResponse(existingSession.concept)
-    }
-
-    const sessionDay = existingSession?.day ?? todayRange.start
 
     const userFramework = await this.prismaService.userFramework.findFirst({
       where: {
@@ -81,6 +74,17 @@ export class ConceptService {
     if (!userFramework) {
       throw new NotFoundException('No active framework found for the user')
     }
+
+    let existingSession = await this.findTodaysSession(userId, todayRange)
+    if (existingSession?.concept?.frameworkId !== userFramework.frameworkId) {
+      existingSession = null
+    }
+
+    if (existingSession?.concept && this.isConceptUsable(existingSession.concept)) {
+      return this.formatConceptResponse(existingSession.concept)
+    }
+
+    const sessionDay = existingSession?.day ?? todayRange.start
 
     const lastCompletedConcept = await this.prismaService.userConceptProgress.findFirst({
       where: {

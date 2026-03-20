@@ -10,6 +10,7 @@ import { DisciplineModule } from './discipline/discipline.module';
 import { FrameworkModule } from './framework/framework.module';
 import { ConceptModule } from './concept/concept.module';
 import { AiModule } from './ai/ai.module';
+import { ProjectModule } from './project/project.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { AiModule } from './ai/ai.module';
     DisciplineModule,
     FrameworkModule,
     ConceptModule,
-    AiModule],
+    AiModule,
+    ProjectModule],
 })
 export class AppModule { }

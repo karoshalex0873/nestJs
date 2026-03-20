@@ -4,6 +4,7 @@ import { ConceptController } from './concept.controller';
 
 @Module({
   providers: [ConceptService],
-  controllers: [ConceptController]
+  controllers: [ConceptController],
+  exports: [ConceptService]
 })
 export class ConceptModule {}

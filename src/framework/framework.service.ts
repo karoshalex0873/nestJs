@@ -1,12 +1,17 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConceptService } from 'src/concept/concept.service';
+import { ProjectService } from 'src/project/project.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { FrameworkDto, UpdateFrameworkDto } from './dto';
 
+type ProjectResult = Awaited<ReturnType<ProjectService['createMainProject']>>
 
 @Injectable()
 export class FrameworkService {
   constructor(
-    private prisma: PrismaService
+    private prisma: PrismaService,
+    private conceptService: ConceptService,
+    private projectService: ProjectService
   ) { }
   // aync function to get all frameworks from the database for the domain selected by the user
   async getFrameworks(disciplineId: string) {
@@ -271,21 +276,38 @@ export class FrameworkService {
       throw new ConflictException('Select the discipline first before selecting a framework')
     }
 
-    // 4. prevent selecting the same framework again
+    // 4. ensure this framework becomes the active one for the user
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userFramework.updateMany({
+        where: { userId, active: true },
+        data: { active: false }
+      })
+
+      await tx.userFramework.upsert({
+        where: { userId_frameworkId: { userId, frameworkId } },
+        create: { userId, frameworkId, active: true },
+        update: { active: true }
+      })
+    })
+
     const alreadySelected = await this.prisma.userFramework.findUnique({
       where: { userId_frameworkId: { userId, frameworkId } },
     })
 
-    if (alreadySelected) {
-      return {
-        message: `${framework.name} framework already selected`,
-      }
+    if (!alreadySelected) {
+      throw new ConflictException('Error selecting framework for user')
     }
 
-    // 5. save selection
-    await this.prisma.userFramework.create({
-      data: { userId, frameworkId },
-    })
+    const concept = await this.conceptService.createConcept(userId)
+
+    let project: ProjectResult | null = null
+    try {
+      project = await this.projectService.createMainProject(userId)
+    } catch (error) {
+      if (!(error instanceof NotFoundException)) {
+        throw error
+      }
+    }
 
     const selectedFrameworks = await this.prisma.$queryRaw<Array<{ id: string; name: string; disciplineName: string; domainName: string }>>`
       SELECT f."id", f."name", d."name" AS "disciplineName", dm."name" AS "domainName"
@@ -299,6 +321,18 @@ export class FrameworkService {
 
     return {
       message: 'Framework selected successfully',
+      activeFramework: {
+        id: framework.id,
+        name: framework.name,
+        description: framework.description,
+        discipline: {
+          id: framework.discipline.id,
+          name: framework.discipline.name,
+        },
+        domain: framework.discipline.domain,
+      },
+      concept,
+      project,
       selectedFramework: {
         id: framework.id,
         name: framework.name,

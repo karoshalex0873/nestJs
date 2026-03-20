@@ -10,12 +10,14 @@ export class AiService {
   })
 
   async generateText(prompt: string) {
+   
     const result = await this.aiClient.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
-        systemInstruction: systemInfo
+        systemInstruction: systemInfo,
       }
+
     })
 
     return result.text
