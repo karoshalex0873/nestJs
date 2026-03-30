@@ -50,11 +50,15 @@ export class UserService {
     })
 
     // send the email to the user for profile update
-    await this.emailService.sendMail({
-      to: updateUser.email,
-      subject: 'Profile Updated',
-      text: 'Your profile has been updated successfully',
-    })
+    try {
+      await this.emailService.sendMail({
+        to: updateUser.email,
+        subject: 'Profile Updated',
+        text: 'Your profile has been updated successfully',
+      })
+    } catch (error) {
+      console.warn('Profile updated but email notification failed:', error instanceof Error ? error.message : error);
+    }
 
 
     // 2. return the updated user
@@ -95,15 +99,18 @@ export class UserService {
       }
     })
 
-    await this.emailService.sendMail({
-      to: user.email,
-      subject: 'Password Updated',
-      text: 'Your password has been changed successfully.',
-    });
+    try {
+      await this.emailService.sendMail({
+        to: user.email,
+        subject: 'Password Updated',
+        text: 'Your password has been changed successfully.',
+      });
+    } catch (error) {
+      console.warn('Password updated but email notification failed:', error instanceof Error ? error.message : error);
+    }
 
     // 3. return the updated user
     return this.getMe(userId);
   }
 
 }
-
