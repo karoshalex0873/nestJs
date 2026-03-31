@@ -14,13 +14,61 @@ export class UserService {
 
   // get me service
   async getMe(userId: string) {
-    // 1. get user from the db of logged in user
     const user = await this.prisma.user.findUnique({
       where: {
         id: userId,
       },
       include: {
         role: true,
+        domains: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          },
+        },
+        disciplines: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            domain: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+        userFrameworks: {
+          where: {
+            active: true,
+          },
+          select: {
+            id: true,
+            frameworkId: true,
+            framework: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                discipline: {
+                  select: {
+                    id: true,
+                    name: true,
+                    domain: {
+                      select: {
+                        id: true,
+                        name: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          take: 1,
+        },
       },
     });
 
@@ -28,9 +76,22 @@ export class UserService {
       throw new NotFoundException('User not found');
     }
 
-    // 2. return the user
     const { password, ...userWithoutPassword } = user;
-    return userWithoutPassword;
+    const activeFramework = user.userFrameworks[0]?.framework ?? null;
+    const hasProfile =
+      Boolean(user.firstName?.trim()) &&
+      Boolean(user.lastName?.trim()) &&
+      Boolean(user.email?.trim());
+    const hasPathSelection =
+      user.domains.length > 0 &&
+      user.disciplines.length > 0 &&
+      Boolean(activeFramework);
+
+    return {
+      ...userWithoutPassword,
+      activeFramework,
+      isFirstTimeUser: !(hasProfile && hasPathSelection),
+    };
   }
 
   // update profile service 

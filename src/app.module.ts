@@ -11,6 +11,7 @@ import { FrameworkModule } from './framework/framework.module';
 import { ConceptModule } from './concept/concept.module';
 import { AiModule } from './ai/ai.module';
 import { ProjectModule } from './project/project.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { ProjectModule } from './project/project.module';
     FrameworkModule,
     ConceptModule,
     AiModule,
-    ProjectModule],
+    ProjectModule,
+    DashboardModule],
 })
 export class AppModule { }

@@ -2,7 +2,7 @@ import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import { ConceptService } from './concept.service';
 import { AuthGuard } from 'src/auth/auth.guard';
 import type { UserRequest } from 'src/user/types';
-import { CompleteConceptDto } from './dto';
+import { CompleteConceptDto, EvaluateConceptDto } from './dto';
 
 @Controller('concept')
 export class ConceptController {
@@ -24,10 +24,22 @@ export class ConceptController {
     return this.conceptService.getConcept(req.user.sub)
   }
 
+  @UseGuards(AuthGuard)
+  @Get('timeline')
+  getTimeline(@Req() req: UserRequest) {
+    return this.conceptService.getLearningTimeline(req.user.sub)
+  }
+
   //  Marks today's concept as completed for the user.
   @UseGuards(AuthGuard)
   @Post('complete')
   completeConcept(@Req() req: UserRequest, @Body() body: CompleteConceptDto) {
     return this.conceptService.completeConcept(req.user.sub, body)
+  }
+
+  @UseGuards(AuthGuard)
+  @Post('evaluate')
+  evaluateConcept(@Req() req: UserRequest, @Body() body: EvaluateConceptDto) {
+    return this.conceptService.evaluateConceptAnswer(req.user.sub, body.answer)
   }
 }

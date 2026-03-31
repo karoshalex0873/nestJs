@@ -348,6 +348,8 @@ Use exactly this JSON shape:
 
   private formatConceptResponse(concept: any) {
     return {
+      id: concept.id,
+      order: concept.order,
       name: concept.name,
       description: concept.description,
       difficulty: concept.difficulty,
@@ -384,6 +386,165 @@ Use exactly this JSON shape:
     }
 
     return this.formatConceptResponse(todaysSession.concept)
+  }
+
+  async getLearningTimeline(userId: string) {
+    const userFramework = await this.prismaService.userFramework.findFirst({
+      where: {
+        userId,
+        active: true,
+      },
+      include: {
+        framework: {
+          include: {
+            discipline: {
+              include: {
+                domain: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    if (!userFramework) {
+      throw new NotFoundException('No active framework found for the user')
+    }
+
+    const todayRange = this.getDayRange(new Date())
+    let todaysSession = await this.findTodaysSession(userId, todayRange)
+
+    if (!todaysSession) {
+      await this.createConcept(userId)
+      todaysSession = await this.findTodaysSession(userId, todayRange)
+    }
+
+    if (!todaysSession?.concept) {
+      throw new NotFoundException('Today concept not found')
+    }
+
+    const concepts = await this.prismaService.concept.findMany({
+      where: {
+        frameworkId: userFramework.frameworkId,
+      },
+      orderBy: {
+        order: 'asc',
+      },
+      select: {
+        id: true,
+        order: true,
+        name: true,
+        description: true,
+      },
+    })
+
+    const progress = await this.prismaService.userConceptProgress.findMany({
+      where: {
+        userId,
+        concept: {
+          frameworkId: userFramework.frameworkId,
+        },
+      },
+      select: {
+        conceptId: true,
+        completed: true,
+      },
+    })
+
+    const completedSet = new Set(progress.filter((item) => item.completed).map((item) => item.conceptId))
+    const currentOrder = todaysSession.concept.order
+
+    const pastConcepts = concepts
+      .filter((item) => completedSet.has(item.id) && item.order < currentOrder)
+      .slice(-2)
+
+    const nextConcept = concepts.find((item) => item.order > currentOrder) ?? null
+
+    return {
+      domain: userFramework.framework.discipline.domain.name,
+      discipline: userFramework.framework.discipline.name,
+      framework: userFramework.framework.name,
+      pastConcepts,
+      todayConcept: {
+        id: todaysSession.concept.id,
+        order: todaysSession.concept.order,
+        name: todaysSession.concept.name,
+        description: todaysSession.concept.description,
+      },
+      nextConcept,
+    }
+  }
+
+  async evaluateConceptAnswer(userId: string, answer: string) {
+    const todayRange = this.getDayRange(new Date())
+    let todaysSession = await this.findTodaysSession(userId, todayRange)
+
+    if (!todaysSession) {
+      await this.createConcept(userId)
+      todaysSession = await this.findTodaysSession(userId, todayRange)
+    }
+
+    if (!todaysSession?.concept) {
+      throw new NotFoundException('No active concept found')
+    }
+
+    const concept = todaysSession.concept
+    const prompt = `
+Evaluate a learner answer against a concept.
+
+Concept:
+- Name: ${concept.name}
+- Description: ${concept.description}
+- Learning objectives: ${JSON.stringify(concept.learningObjectives)}
+- Evaluation criteria: ${JSON.stringify(concept.evaluationCriteria)}
+
+Learner answer:
+${answer}
+
+Return JSON only:
+{
+  "score": <0-100 integer>,
+  "passed": <true|false>,
+  "feedback": "<short actionable feedback>"
+}
+`.trim()
+
+    let score = 0
+    let passed = false
+    let feedback = 'Keep refining your answer with clearer implementation details.'
+
+    try {
+      const raw = await this.aiService.generateText(prompt)
+      if (raw) {
+        const parsed = JSON.parse(raw) as { score?: number; passed?: boolean; feedback?: string }
+        score = Math.max(0, Math.min(100, Math.round(parsed.score ?? 0)))
+        passed = Boolean(parsed.passed) || score >= 70
+        feedback = parsed.feedback?.trim() || feedback
+      }
+    } catch {
+      score = answer.trim().length >= 120 ? 70 : 50
+      passed = score >= 70
+      feedback = passed
+        ? 'Good answer quality. Your concept is marked complete.'
+        : 'Add more concrete steps and examples, then try again.'
+    }
+
+    if (passed) {
+      await this.completeConcept(userId, {
+        conceptId: concept.id,
+        score,
+        feedback,
+        projectCompleted: false,
+      })
+    }
+
+    return {
+      conceptId: concept.id,
+      score,
+      passed,
+      feedback,
+      nextConceptUnlocked: passed,
+    }
   }
 
   private async generateConceptFromAi(prompt: string): Promise<GeneratedConcept> {

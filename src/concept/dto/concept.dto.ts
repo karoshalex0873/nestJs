@@ -148,3 +148,9 @@ export class CompleteConceptDto {
 	@MinLength(3)
 	feedback?: string
 }
+
+export class EvaluateConceptDto {
+	@IsString()
+	@MinLength(20)
+	answer!: string
+}
